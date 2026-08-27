@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.codex.dsh-local.updater</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/qigongneng/Library/Application Support/DSHLocalOfficial/bin/update.sh</string>
+    <string>--scheduled</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>21600</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/qigongneng/.local/bin:/Users/qigongneng/.hermes/node/bin:/Users/qigongneng/.nvm/versions/node/v26.2.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>DSH_HOME</key>
+    <string>/Users/qigongneng/.dsh</string>
+    <key>DSH_LOCAL_NODE_BIN</key>
+    <string>/Users/qigongneng/.local/bin/node</string>
+    <key>DSH_LOCAL_NPM_BIN</key>
+    <string>/Users/qigongneng/.local/bin/npm</string>
+    <key>DSH_LOCAL_SUPPORT_ROOT</key>
+    <string>/Users/qigongneng/Library/Application Support/DSHLocalOfficial</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/qigongneng/Library/Application Support/DSHLocalOfficial/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/qigongneng/Library/Application Support/DSHLocalOfficial/logs/launchd.err.log</string>
+</dict>
+</plist>

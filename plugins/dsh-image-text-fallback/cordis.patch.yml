@@ -1,0 +1,4 @@
+# dsh-image-text-fallback: profile 将其列为 bundle 时应用的 layer
+- insert:
+    - id: image-text-fallback
+      name: dsh-image-text-fallback

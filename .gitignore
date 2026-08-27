@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# 构建产物
+build/
+*.app
+*.dSYM/
+
+# 官方 DeepSeek Harness 源码（依赖，非本仓库代码）
+upstream/
+
+# Node / pnpm 依赖
+node_modules/
+plugins/*/node_modules/
+
+# 备份与临时文件
+*.bak
+*.tgz
+.tmp/

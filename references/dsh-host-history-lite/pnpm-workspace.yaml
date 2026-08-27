@@ -1,0 +1,7 @@
+# This repository is its own pnpm workspace (the machine's home-level
+# pnpm-workspace.yaml is a stub). Native transitive build scripts are not
+# needed by this plugin — nothing here imports the packages that ship them.
+allowBuilds:
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
