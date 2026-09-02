@@ -16,3 +16,10 @@
 - `dsh-market` 必须通过启动补丁保持 `allowRestart: false`；不得让市场的通用 CLI 重启助手创建脱离 DSH Local 的进程。
 - 主题安装、停用和应用优先使用市场自带热加载；必须整进程重启时，应退出并重新打开 DSH Local。
 - 市场主题兼容补丁只能匹配并替换已确认的精确上游代码签名；签名变化时必须停止修改并输出警告，不能猜测性改写更新后的市场源码。
+
+## Windows 兼容边界
+
+- Windows 只复用与 Node/DSH 插件相关的跨平台兼容逻辑；不得复制 macOS 的 Swift、WKWebView、LaunchAgent、应用签名或剪贴板桥。
+- Windows 官方 CLI 自己管理 Harness 生命周期，不注入 macOS 桌面壳专用的 `allowRestart: false`。
+- Windows 修复脚本必须自动识别 `%USERPROFILE%\.dsh`、npm 全局运行时布局，并保持幂等；插件升级后可以再次运行。
+- 清除内置皮肤覆盖前必须备份 `skin-center-active.json`，不得修改宠物设置、会话、凭据或工作区数据。

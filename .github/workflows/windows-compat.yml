@@ -1,0 +1,36 @@
+name: Windows compatibility
+
+on:
+  push:
+    paths:
+      - '.github/workflows/windows-compat.yml'
+      - 'scripts/patch-market-compat.mjs'
+      - 'scripts/repair-windows.ps1'
+      - 'scripts/start-windows.ps1'
+      - 'tests/patch-market-compat.test.mjs'
+      - 'tests/windows-repair-smoke.ps1'
+  pull_request:
+    paths:
+      - '.github/workflows/windows-compat.yml'
+      - 'scripts/patch-market-compat.mjs'
+      - 'scripts/repair-windows.ps1'
+      - 'scripts/start-windows.ps1'
+      - 'tests/patch-market-compat.test.mjs'
+      - 'tests/windows-repair-smoke.ps1'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test cross-platform compatibility helper
+        run: node --test tests/patch-market-compat.test.mjs
+      - name: Test Windows PowerShell 5.1 repair wrapper
+        shell: powershell
+        run: .\tests\windows-repair-smoke.ps1

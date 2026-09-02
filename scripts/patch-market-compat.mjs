@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
 const profileDirectory = process.argv[2]
@@ -8,12 +9,13 @@ const runtimeDirectory = process.argv[3]
 
 const marketDirectory = join(profileDirectory, 'node_modules', 'dshmarket')
 const manifestFile = join(marketDirectory, 'package.json')
-if (!existsSync(manifestFile)) process.exit(0)
 
 let marketVersion = 'unknown'
-try {
-  marketVersion = JSON.parse(readFileSync(manifestFile, 'utf8')).version ?? marketVersion
-} catch {}
+if (existsSync(manifestFile)) {
+  try {
+    marketVersion = JSON.parse(readFileSync(manifestFile, 'utf8')).version ?? marketVersion
+  } catch {}
+}
 
 // dsh-market <= 1.39 classifies themes only by the catalog display identity
 // (`plugin.name`). A catalog entry may publish under a different npm identity
@@ -71,14 +73,37 @@ if (changed) {
 // factory is materialized. Apply the narrow migration only when the running
 // Harness actually carries the new store package. Exact signatures keep this
 // a no-op as soon as the theme publishes an upstream-compatible bundle.
-const storeManifest = runtimeDirectory
-  ? join(runtimeDirectory, 'packages', 'client', 'store', 'package.json')
-  : ''
+function runtimeProvidesClientStore() {
+  if (!runtimeDirectory) return false
+
+  // Source builds (including DSH Local on macOS) keep the package in the
+  // workspace. npm installations (the normal Windows layout) hoist it next
+  // to @deepseek-ai/dsh, or occasionally below the runtime package itself.
+  // Check exact package locations first, then ask Node's resolver from the
+  // runtime package. This is a capability check, not a version comparison.
+  const candidates = [
+    join(runtimeDirectory, 'packages', 'client', 'store', 'package.json'),
+    join(runtimeDirectory, 'node_modules', '@deepseek-ai', 'dsh-client-store', 'package.json'),
+    join(runtimeDirectory, '..', 'dsh-client-store', 'package.json'),
+  ]
+  if (candidates.some(candidate => existsSync(candidate))) return true
+
+  const runtimeManifest = join(runtimeDirectory, 'package.json')
+  if (!existsSync(runtimeManifest)) return false
+  try {
+    const requireFromRuntime = createRequire(runtimeManifest)
+    requireFromRuntime.resolve('@deepseek-ai/dsh-client-store')
+    return true
+  } catch {
+    return false
+  }
+}
+
 const mineradioDirectory = join(profileDirectory, 'node_modules', 'dsh-theme-mineradio')
 const mineradioManifest = join(mineradioDirectory, 'package.json')
 const mineradioClient = join(mineradioDirectory, 'lib', 'client.js')
 
-if (storeManifest && existsSync(storeManifest) && existsSync(mineradioManifest) && existsSync(mineradioClient)) {
+if (runtimeProvidesClientStore() && existsSync(mineradioManifest) && existsSync(mineradioClient)) {
   let themeVersion = 'unknown'
   try {
     themeVersion = JSON.parse(readFileSync(mineradioManifest, 'utf8')).version ?? themeVersion

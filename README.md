@@ -1,6 +1,6 @@
 # DSH Local
 
-DSH Local 是为这台 Mac 本机编译的轻量桌面壳。它通过 `WKWebView` 展示 DeepSeek Harness 官方 Web UI，不包含第三方预编译 Harness 核心，也不代表 DeepSeek 官方背书。
+DSH Local 是为这台 Mac 本机编译的轻量桌面壳。它通过 `WKWebView` 展示 DeepSeek Harness 官方 Web UI，不包含第三方预编译 Harness 核心，也不代表 DeepSeek 官方背书。仓库同时提供 Windows 官方 CLI 的主题兼容脚本；Windows 脚本不是桌面壳，也不会移植 macOS 的 Swift/WKWebView 代码。
 
 项目维护、依赖升级和自动更新必须遵守 [`CONSTRAINTS.md`](CONSTRAINTS.md)。其中 `@linxin666/dsh-web-ui-all@0.3.6` 已明确冻结为只读参考，不属于运行依赖或更新对象。
 
@@ -13,6 +13,28 @@ DSH Local 是为这台 Mac 本机编译的轻量桌面壳。它通过 `WKWebView
 从 `1.2.2` 起，桌面壳会给 `dsh-market` 注入受托管运行配置，禁止插件市场用通用 CLI 助手私自重启 Harness。主题的安装、停用和应用仍支持热切换；确需整进程重启时，由 DSH Local 退出并重新打开，避免产生父进程为 1 的脱管实例并导致主题看似切换失败。兼容层还修复市场目录名与真实 npm 包名不一致时（例如 `dsh-bloom-theme` / `@kubor/dsh-bloom-theme`）点“使用”却报 `not an installed theme` 的问题；官方市场包含等效修复后，本地补丁自动变成空操作。
 
 从 `1.2.3` 起，启动兼容层会识别 Mineradio 2.3.5 使用的 Harness 0.1.1 旧 Store 入口，并在当前官方运行时已提供 `@deepseek-ai/dsh-client-store` 时，将主题浏览器 bundle 与注入声明精确迁移到新入口。补丁只接受唯一的已知签名；主题上游发布原生兼容版本后会自动跳过，不覆盖新实现。
+
+## Windows 主题兼容
+
+`scripts/repair-windows.ps1` 将 macOS 上已经验证的两项跨平台修复应用到 Windows 官方 DSH CLI：
+
+- 修复 `dshmarket` 主题目录名称与真实 npm 包名不一致时无法切换的问题，并确保“使用主题”前启用对应加载行；
+- 仅在当前运行时确实包含 `@deepseek-ai/dsh-client-store` 时，把 Mineradio 2.3.5 的旧 Store 入口迁移到新入口。
+
+脚本会自动寻找 `%USERPROFILE%\.dsh\profiles\web`、Node 和全局安装的 `@deepseek-ai/dsh`。它是幂等的，可在每次启动前运行；插件上游签名变化时只报警，不猜测性修改。`-ResetBuiltInSkin` 可清除仍覆盖市场主题的内置皮肤，并先在原目录生成时间戳备份。
+
+```powershell
+# 只修复插件兼容
+powershell -ExecutionPolicy Bypass -File .\scripts\repair-windows.ps1
+
+# 修复后启动官方 DSH Web；默认只监听 127.0.0.1:3030
+powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1
+
+# 同时清除残留的内置皮肤覆盖（会先备份状态文件）
+powershell -ExecutionPolicy Bypass -File .\scripts\start-windows.ps1 -ResetBuiltInSkin
+```
+
+Windows 官方 CLI 自己管理进程，因此不会套用 macOS 桌面壳专用的 `allowRestart: false`。冻结参考包 `@linxin666/dsh-web-ui-all@0.3.6` 始终不更新、不启用、不修改。
 
 ## 来源与更新
 
