@@ -26,11 +26,29 @@ export DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
 export PATH="${node_bin:h}:$HOME/.local/bin:$HOME/.hermes/node/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 launch_args=(web)
 
+# DSH Local owns the Harness child process. dsh-market's generic CLI restart
+# helper deliberately detaches a replacement process; under this desktop shell
+# that replacement becomes an orphan and the app can no longer stop, restart,
+# or reliably refresh it. Keep theme/plugin hot activation enabled, but leave
+# full process restarts to DSH Local.
+profile_manifest="$DSH_HOME/profiles/web/package.json"
+if [[ -f "$profile_manifest" ]] \
+  && grep -Eq '"(dshmarket|dsh-market)"' "$profile_manifest"; then
+  market_compat_helper="${0:A:h}/patch-market-compat.mjs"
+  if [[ -f "$market_compat_helper" ]]; then
+    "$node_bin" "$market_compat_helper" "$DSH_HOME/profiles/web" "$source_root" || \
+      print -u2 -- "DSH Local: dsh-market theme compatibility could not be applied"
+  fi
+  supervisor_patch="$support_root/state/dsh-local-supervisor.patch.yml"
+  mkdir -p "$support_root/state"
+  print -r -- $'- id: dsh-market\n  config:\n    allowRestart: false' >| "$supervisor_patch"
+  launch_args+=(--patch "$supervisor_patch")
+fi
+
 # A locally installed history compactor uses Host-internal APIs. The updater
 # records every official version that passed an isolated plugin smoke test. If
 # an upgrade has not passed, keep the official runtime available and disable
 # only this optional row until it is revalidated.
-profile_manifest="$DSH_HOME/profiles/web/package.json"
 current_version_file="$support_root/state/current-version"
 history_lite_compatible_file="$support_root/state/history-lite-compatible-version"
 if [[ -f "$profile_manifest" ]] \

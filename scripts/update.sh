@@ -21,7 +21,113 @@ log() {
   print -- "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
-for command_name in awk curl ditto jq git lsof rg shasum tar; do
+# DSH 0.1.2+ protects the browser surface with a one-time launch token. The
+# token is exchanged at the printed root URL for an HttpOnly browser cookie.
+# Smoke tests run in throwaway processes, so they may consume that token; the
+# production desktop process must instead hand its token directly to WebKit.
+redact_web_tokens() {
+  sed -E 's/([?&]token=)[A-Za-z0-9_-]+/\1<redacted>/g'
+}
+
+redact_web_tokens_in_file() {
+  local source_file="$1"
+  local redacted_file="$source_file.redacted.$$"
+  [[ -f "$source_file" ]] || return 0
+  if redact_web_tokens <"$source_file" >| "$redacted_file"; then
+    mv -fh "$redacted_file" "$source_file"
+  else
+    : >| "$redacted_file"
+  fi
+}
+
+auth_artifacts=()
+sanitize_auth_artifacts() {
+  local artifact
+  for artifact in "${auth_artifacts[@]}"; do
+    [[ -f "$artifact" ]] && : >| "$artifact"
+  done
+  if [[ -n "$stage" && -d "$stage" ]]; then
+    local log_path
+    while IFS= read -r log_path; do
+      redact_web_tokens_in_file "$log_path"
+    done < <(find "$stage" -type f -name '*.log' 2>/dev/null)
+  fi
+}
+
+# Wait for the official readiness URL, validate its loopback authority, perform
+# the one-time token exchange when present, then verify the authenticated root.
+# The cookie jar is caller-owned so a following API probe can reuse it.
+wait_for_authenticated_web() {
+  local web_port="$1"
+  local output_log="$2"
+  local process_pid="$3"
+  local cookie_jar="$4"
+  local origin="http://127.0.0.1:$web_port"
+  local launch_url=""
+  local launch_token=""
+  local exchange_headers="$cookie_jar.headers"
+  local exchange_error="$cookie_jar.error"
+  local exchange_status=""
+
+  auth_artifacts+=("$cookie_jar" "$exchange_headers" "$exchange_error")
+  : >| "$cookie_jar"
+  : >| "$exchange_headers"
+  : >| "$exchange_error"
+
+  for _ in {1..180}; do
+    launch_url="$(awk -v marker="dsh web: $origin/" '
+      index($0, marker) {
+        value = substr($0, index($0, marker) + 9)
+        sub(/[[:space:]].*$/, "", value)
+        print value
+        exit
+      }
+    ' "$output_log")"
+    [[ -n "$launch_url" ]] && break
+    if ! kill -0 "$process_pid" 2>/dev/null; then
+      return 1
+    fi
+    sleep 1
+  done
+
+  case "$launch_url" in
+    "$origin/")
+      ;;
+    "$origin/?token="*)
+      launch_token="${launch_url#"$origin/?token="}"
+      if [[ ! "$launch_token" =~ '^[A-Za-z0-9_-]{43}$' ]]; then
+        log "ERROR DSH printed an invalid browser launch token"
+        return 1
+      fi
+      if ! exchange_status="$(curl --noproxy '*' -sS --max-time 10 \
+        -c "$cookie_jar" -D "$exchange_headers" -o /dev/null -w '%{http_code}' \
+        "$launch_url" 2>"$exchange_error")"; then
+        redact_web_tokens <"$exchange_error" || true
+        return 1
+      fi
+      if [[ "$exchange_status" != "303" ]] \
+        || ! rg -qi '^location:[[:space:]]*/[[:space:]]*$' "$exchange_headers" \
+        || ! rg -qi '^set-cookie:' "$exchange_headers"; then
+        log "ERROR DSH browser token exchange returned HTTP $exchange_status"
+        return 1
+      fi
+      ;;
+    *)
+      [[ -n "$launch_url" ]] && log "ERROR DSH printed an unexpected readiness URL (redacted)"
+      return 1
+      ;;
+  esac
+
+  if [[ -n "$launch_token" ]]; then
+    curl --noproxy '*' -fsS --max-time 10 -b "$cookie_jar" "$origin/" \
+      | rg -q '<html|DeepSeek Harness'
+  else
+    curl --noproxy '*' -fsS --max-time 10 "$origin/" \
+      | rg -q '<html|DeepSeek Harness'
+  fi
+}
+
+for command_name in awk curl ditto find jq git lsof rg sed shasum tar; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     log "ERROR required command is unavailable: $command_name"
     exit 69
@@ -51,6 +157,7 @@ finish() {
     kill -TERM "$smoke_pid" 2>/dev/null || true
     wait "$smoke_pid" 2>/dev/null || true
   fi
+  sanitize_auth_artifacts
   if (( exit_code != 0 )) && [[ -n "$stage" && -d "$stage" ]]; then
     failure_path="$support_root/failures/${stage:t}-$timestamp"
     mv "$stage" "$failure_path" 2>/dev/null || true
@@ -248,19 +355,13 @@ log "Starting isolated smoke test on 127.0.0.1:$smoke_port"
 smoke_pid=$!
 
 healthy=false
-for _ in {1..180}; do
-  if curl -fsS --max-time 2 "http://127.0.0.1:$smoke_port/" | rg -q '<html|DeepSeek Harness'; then
-    healthy=true
-    break
-  fi
-  if ! kill -0 "$smoke_pid" 2>/dev/null; then
-    break
-  fi
-  sleep 1
-done
+smoke_cookie_jar="$smoke_home/browser-cookie.jar"
+if wait_for_authenticated_web "$smoke_port" "$smoke_log" "$smoke_pid" "$smoke_cookie_jar"; then
+  healthy=true
+fi
 if [[ "$healthy" != true ]]; then
   log "ERROR isolated health check failed"
-  tail -n 120 "$smoke_log" || true
+  tail -n 120 "$smoke_log" | redact_web_tokens || true
   exit 70
 fi
 kill -TERM "$smoke_pid" 2>/dev/null || true
@@ -303,21 +404,16 @@ if [[ -f "$profile_manifest" ]] && jq -e '.dependencies["dsh-host-history-lite-l
       smoke_pid=$!
 
       plugin_healthy=false
-      for _ in {1..180}; do
-        if curl -fsS --max-time 2 "http://127.0.0.1:$plugin_smoke_port/" | rg -q '<html|DeepSeek Harness'; then
-          plugin_healthy=true
-          break
-        fi
-        if ! kill -0 "$smoke_pid" 2>/dev/null; then
-          break
-        fi
-        sleep 1
-      done
+      plugin_cookie_jar="$plugin_smoke_home/browser-cookie.jar"
+      if wait_for_authenticated_web "$plugin_smoke_port" "$plugin_smoke_log" "$smoke_pid" "$plugin_cookie_jar"; then
+        plugin_healthy=true
+      fi
 
       if [[ "$plugin_healthy" == true ]]; then
         probe_headers="$plugin_smoke_home/probe.headers"
         probe_body="$plugin_smoke_home/probe.json"
         if curl -sS --max-time 10 -D "$probe_headers" -o "$probe_body" \
+          -b "$plugin_cookie_jar" \
           -H 'content-type: application/json' \
           --data-binary '{"type":"client-request","rpcId":"history-lite-update-smoke","method":"session.history","payload":{"sessionId":"session-00000000-0000-4000-8000-000000000000","maxMessages":1}}' \
           "http://127.0.0.1:$plugin_smoke_port/api/session.history" \
@@ -340,6 +436,8 @@ if [[ -f "$profile_manifest" ]] && jq -e '.dependencies["dsh-host-history-lite-l
     log "WARNING history-lite-local did not pass on $version; the official runtime will update and the optional plugin will be disabled"
   fi
 fi
+
+sanitize_auth_artifacts
 
 version_root="$support_root/versions/$version"
 if [[ -e "$version_root/source" ]]; then

@@ -42,13 +42,13 @@ swiftc \
   -O \
   -framework Cocoa \
   -framework WebKit \
-  "$project_root/Sources/main.swift" \
+  "$project_root/Sources/"*.swift \
   -o "$app/Contents/MacOS/DSHLocal"
 
 cp "$project_root/templates/Info.plist" "$app/Contents/Info.plist"
 ditto "$node_source" "$app/Contents/Resources/bin/node"
 chmod 755 "$app/Contents/Resources/bin/node"
-for script in start-current.sh update.sh rollback.sh; do
+for script in start-current.sh update.sh rollback.sh patch-market-compat.mjs; do
   cp "$project_root/scripts/$script" "$app/Contents/Resources/scripts/$script"
   chmod 755 "$app/Contents/Resources/scripts/$script"
 done
